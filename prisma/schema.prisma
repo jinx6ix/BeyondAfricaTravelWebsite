@@ -1,0 +1,258 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── AUTH ────────────────────────────────────────────────────────────────────
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String
+  role          Role      @default(STAFF)
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  MANAGER
+}
+
+// ─── TOURS ───────────────────────────────────────────────────────────────────
+model Tour {
+  id          Int       @id @default(autoincrement())
+  name        String
+  destination String
+  days        Int
+  nights      Int
+  price       Float
+  category    TourCategory
+  rating      Float     @default(0)
+  reviewCount Int       @default(0)
+  emoji       String    @default("🌍")
+  color       String    @default("#1B3A2D")
+  description String    @db.Text
+  maxGroup    Int       @default(12)
+  featured    Boolean   @default(false)
+  active      Boolean   @default(true)
+  highlights  String[]
+  includes    String[]
+  excludes    String[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  itinerary   ItineraryDay[]
+  bookings    Booking[]
+  reviews     Review[]
+
+  @@map("tours")
+}
+
+enum TourCategory {
+  SAFARI
+  BEACH
+  ADVENTURE
+  WILDLIFE
+  CULTURAL
+}
+
+model ItineraryDay {
+  id          Int    @id @default(autoincrement())
+  day         Int
+  title       String
+  description String @db.Text
+  tourId      Int
+  tour        Tour   @relation(fields: [tourId], references: [id], onDelete: Cascade)
+
+  @@map("itinerary_days")
+}
+
+// ─── CLIENTS ─────────────────────────────────────────────────────────────────
+model Client {
+  id          String       @id @default(cuid())
+  name        String
+  email       String       @unique
+  phone       String?
+  nationality String?
+  status      ClientStatus @default(NEW)
+  totalTrips  Int          @default(0)
+  totalSpent  Float        @default(0)
+  notes       String?      @db.Text
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  bookings    Booking[]
+  reviews     Review[]
+
+  @@map("clients")
+}
+
+enum ClientStatus {
+  NEW
+  ACTIVE
+  VIP
+}
+
+// ─── BOOKINGS ────────────────────────────────────────────────────────────────
+model Booking {
+  id            String        @id @default(cuid())
+  reference     String        @unique @default(cuid())
+  clientId      String?
+  client        Client?       @relation(fields: [clientId], references: [id])
+  tourId        Int?
+  tour          Tour?         @relation(fields: [tourId], references: [id])
+  // Denormalised for cases where tour/client are deleted
+  clientName    String
+  clientEmail   String
+  clientPhone   String?
+  tourName      String
+  travelDate    DateTime
+  pax           Int           @default(1)
+  amount        Float
+  status        BookingStatus @default(PENDING)
+  paymentStatus PaymentStatus @default(UNPAID)
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  payments      Payment[]
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  DEPOSIT
+  PARTIAL
+  PAID
+}
+
+// ─── PAYMENTS ────────────────────────────────────────────────────────────────
+model Payment {
+  id          String        @id @default(cuid())
+  bookingId   String
+  booking     Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  amount      Float
+  method      PaymentMethod @default(BANK_TRANSFER)
+  reference   String?
+  notes       String?
+  createdAt   DateTime      @default(now())
+
+  @@map("payments")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  MPESA
+  CREDIT_CARD
+  CASH
+  STRIPE
+}
+
+// ─── STAFF ───────────────────────────────────────────────────────────────────
+model Staff {
+  id         String     @id @default(cuid())
+  name       String
+  role       String
+  department Department
+  phone      String?
+  email      String     @unique
+  toursLed   Int        @default(0)
+  rating     Float      @default(0)
+  active     Boolean    @default(true)
+  joinedAt   DateTime   @default(now())
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@map("staff")
+}
+
+enum Department {
+  OPERATIONS
+  SALES
+  FINANCE
+  MARKETING
+}
+
+// ─── FINANCES ────────────────────────────────────────────────────────────────
+model Finance {
+  id          String         @id @default(cuid())
+  type        FinanceType
+  category    String
+  description String
+  amount      Float
+  date        DateTime
+  status      FinanceStatus  @default(PENDING)
+  bookingRef  String?
+  createdAt   DateTime       @default(now())
+
+  @@map("finances")
+}
+
+enum FinanceType {
+  INCOME
+  EXPENSE
+}
+
+enum FinanceStatus {
+  PENDING
+  RECEIVED
+  PAID
+}
+
+// ─── REVIEWS ─────────────────────────────────────────────────────────────────
+model Review {
+  id        String   @id @default(cuid())
+  tourId    Int
+  tour      Tour     @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  name      String
+  country   String?
+  rating    Int
+  text      String   @db.Text
+  approved  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@map("reviews")
+}
+
+// ─── ENQUIRIES ───────────────────────────────────────────────────────────────
+model Enquiry {
+  id        String        @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  tourName  String?
+  message   String        @db.Text
+  status    EnquiryStatus @default(NEW)
+  createdAt DateTime      @default(now())
+
+  @@map("enquiries")
+}
+
+enum EnquiryStatus {
+  NEW
+  CONTACTED
+  CONVERTED
+  CLOSED
+}
